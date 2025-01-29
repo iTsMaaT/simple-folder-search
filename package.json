@@ -1,0 +1,46 @@
+{
+  "name": "simple-folder-search",
+  "version": "1.0.0",
+  "description": "A simple folder search package",
+  "main": "dist/index.cjs",
+  "exports": {
+    "import": "./dist/index.mjs",
+    "require": "./dist/index.cjs"
+  },
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsup src/index.ts --format esm,cjs --dts --out-dir dist",
+    "code": "git pull && npm i && code . && eslint src",
+    "c": "npm run code"
+  },
+  "author": "iTsMaaT",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iTsMaaT/simple-folder-search.git.git"
+  },
+  "bugs": {
+    "url": "https://github.com/iTsMaaT/simple-folder-search.git"
+  },
+  "homepage": "https://github.com/iTsMaaT/simple-folder-search.git",
+  "keywords": [
+    "folder",
+    "file",
+    "search",
+    "find"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "eslint": "^9.17.0",
+    "globals": "^15.13.0",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "fuse.js": "^7.0.0"
+  }
+}
