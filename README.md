@@ -2,6 +2,8 @@
 
 This package provides a simple way to search for files within a folder. It is designed to be easy to use and integrate into your projects.
 
+This was mostly made for use with the `discord-player` package, but it can still be used almost everywhere.
+
 ## Features
 
 - Search for files by name
@@ -21,32 +23,29 @@ npm install simple-folder-search
 Here is an example of how to use the package to search for files and play a file using `discord-player`'s search method:
 
 ```javascript
-const { searchFiles } = require('simple-folder-search');
-const { Player } = require('discord-player');
+const simpleFolderSearch = require('simple-folder-search');
+const { Player, QueryType } = require('discord-player');
 
 // Initialize the player
 const player = new Player(client);
 
-// Search for files in a directory
-const files = searchFiles('path/to/your/folder', { extension: '.mp3' });
+// Search for music files in your music folder
+const musicFiles = simpleFolderSearch('./music', ['.mp3', '.wav'], 'my song', 0.6);
 
-// Use discord-player to search and play a file
-async function playFile(query) {
-    const searchResult = await player.search(query, {
-        requestedBy: message.author,
-        searchEngine: 'youtube' // or 'soundcloud'
+if (musicFiles.length > 0) {
+    // Get the first matching file
+    const firstMatch = musicFiles[0];
+    
+    // Search the track using the proper engine
+    const research = player.search(firstMatch, {
+        searchEngine: QueryType.FILE,
     });
 
-    if (!searchResult || !searchResult.tracks.length) {
-        return message.channel.send('No results found!');
-    }
-
-    const track = searchResult.tracks[0];
-    player.play(message.member.voice.channel, track, message.member.user);
+    // Play the file using discord-player
+    await player.play(voiceChannel, research);
+} else {
+    console.log('No matching files found');
 }
-
-// Example usage
-playFile(files[0]);
 ```
 
 ## License
