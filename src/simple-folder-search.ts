@@ -11,7 +11,7 @@ import Fuse from "fuse.js";
  * @param {number} [minimumScore=0.6] - The minimum score for a match to be considered valid.
  * @returns {string[]} An array of file paths that match the search query.
  */
-export default function simpleFolderSearch(filepath: string, fileExtensions: string[], search: string, minimumScore: number = 0.6): string[] {
+export function simpleFolderSearch(filepath: string, fileExtensions: string[], search: string, minimumScore: number = 0.6): string[] {
     const absolutePath = path.resolve(process.cwd(), filepath);
 
     if (!fs.existsSync(absolutePath)) throw new Error("Filepath does not exist.");

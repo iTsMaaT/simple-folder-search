@@ -30,7 +30,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
-  default: () => index_default
+  simpleFolderSearch: () => simpleFolderSearch
 });
 module.exports = __toCommonJS(index_exports);
 
@@ -74,7 +74,7 @@ function simpleFolderSearch(filepath, fileExtensions, search, minimumScore = 0.6
   const results = fuse.search(search);
   return results.filter((result) => result.score ? result.score <= 1 - minimumScore : false).map((result) => result.item.path);
 }
-
-// src/index.ts
-var index_default = simpleFolderSearch;
-module.exports = simpleFolderSearch;
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  simpleFolderSearch
+});

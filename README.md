@@ -23,7 +23,7 @@ npm install simple-folder-search
 Here is an example of how to use the package to search for files and play a file using `discord-player`'s search method:
 
 ```javascript
-const simpleFolderSearch = require('simple-folder-search');
+const { simpleFolderSearch } = require('simple-folder-search');
 const { Player, QueryType } = require('discord-player');
 
 // Initialize the player

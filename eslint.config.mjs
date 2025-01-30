@@ -23,7 +23,8 @@ export default [...compat.extends(
         "node_modules",
         "eslint.config.mjs",
         "tsup.config.ts",
-        "tinker.ts"
+        "tinker.ts",
+        "tinker.js"
     ],
     plugins: {
         "@typescript-eslint": typescriptEslint,

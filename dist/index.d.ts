@@ -9,4 +9,4 @@
  */
 declare function simpleFolderSearch(filepath: string, fileExtensions: string[], search: string, minimumScore?: number): string[];
 
-export { simpleFolderSearch as default };
+export { simpleFolderSearch };
