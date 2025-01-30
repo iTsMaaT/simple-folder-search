@@ -41,6 +41,7 @@ function simpleFolderSearch(filepath, fileExtensions, search, minimumScore = 0.6
 
 // src/index.ts
 var index_default = simpleFolderSearch;
+module.exports = simpleFolderSearch;
 export {
   index_default as default
 };
