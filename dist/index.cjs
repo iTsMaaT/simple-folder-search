@@ -38,40 +38,61 @@ module.exports = __toCommonJS(index_exports);
 var import_fs = __toESM(require("fs"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_fuse = __toESM(require("fuse.js"), 1);
-function simpleFolderSearch(filepath, fileExtensions, search, minimumScore = 0.6) {
+async function simpleFolderSearch(filepath, fileExtensions, search, minimumScore = 0.6, batchSize = 100, cacheCallback) {
   const absolutePath = import_path.default.resolve(process.cwd(), filepath);
   if (!import_fs.default.existsSync(absolutePath)) throw new Error("Filepath does not exist.");
   if (!Array.isArray(fileExtensions)) throw new Error("fileExtensions must be an array.");
-  if (typeof search !== "string") throw new Error("Search query must be a string.");
+  if (typeof search !== "string" && !Array.isArray(search)) throw new Error("Search query must be a string or an array.");
   if (typeof minimumScore !== "number") throw new Error("Minimum score must be a number.");
   if (minimumScore < 0 || minimumScore > 1) throw new Error("Minimum score must be between 0 and 1.");
-  const collectFiles = (dir) => {
-    const entries = import_fs.default.readdirSync(dir, { withFileTypes: true });
-    let files = [];
-    for (const entry of entries) {
-      const fullPath = import_path.default.join(dir, entry.name);
-      if (entry.isDirectory())
-        files = files.concat(collectFiles(fullPath));
-      else if (fileExtensions.some((ext) => entry.name.endsWith(ext)))
-        files.push(fullPath);
+  if (typeof batchSize !== "number" || batchSize <= 0) throw new Error("Batch size must be a positive number.");
+  let filesForFuse = [];
+  if (cacheCallback) {
+    const cachedFiles = await cacheCallback(absolutePath, fileExtensions);
+    filesForFuse = cachedFiles.map((file) => ({
+      name: import_path.default.parse(file).name,
+      artist: import_path.default.basename(import_path.default.dirname(file)),
+      path: file
+    }));
+  } else {
+    function* collectFiles(dir) {
+      const entries = import_fs.default.readdirSync(dir, { withFileTypes: true });
+      let batch = [];
+      for (const entry of entries) {
+        const fullPath = import_path.default.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          yield* collectFiles(fullPath);
+        } else if (fileExtensions.length == 0 || fileExtensions.some((ext) => entry.name.endsWith(ext))) {
+          batch.push(fullPath);
+          if (batch.length >= batchSize) {
+            yield batch;
+            batch = [];
+          }
+        }
+      }
+      if (batch.length > 0)
+        yield batch;
     }
-    return files;
-  };
-  const allFiles = collectFiles(absolutePath);
-  if (!search.trim())
-    return allFiles;
+    for (const batch of collectFiles(absolutePath)) {
+      for (const file of batch) {
+        filesForFuse.push({
+          name: import_path.default.parse(file).name,
+          artist: import_path.default.basename(import_path.default.dirname(file)),
+          path: file
+        });
+      }
+    }
+  }
+  if (!search || Array.isArray(search) && search.length === 0)
+    return filesForFuse.map((file) => file.path);
   const fuseOptions = {
     includeScore: true,
     threshold: 1 - minimumScore,
     // Convert our score to Fuse threshold
-    keys: ["name"]
+    keys: ["name", "artist"]
   };
-  const filesForFuse = allFiles.map((file) => ({
-    name: import_path.default.parse(file).name,
-    path: file
-  }));
   const fuse = new import_fuse.default(filesForFuse, fuseOptions);
-  const results = fuse.search(search);
+  const results = Array.isArray(search) ? fuse.search({ name: search[0], artist: search[1] }) : fuse.search(search);
   return results.filter((result) => result.score ? result.score <= 1 - minimumScore : false).map((result) => result.item.path);
 }
 // Annotate the CommonJS export names for ESM import in node:
