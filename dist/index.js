@@ -2,7 +2,14 @@
 import fs from "fs";
 import path from "path";
 import Fuse from "fuse.js";
-async function simpleFolderSearch(filepath, fileExtensions, search, minimumScore = 0.6, batchSize = 100, cacheCallback) {
+import * as mm from "music-metadata";
+async function simpleFolderSearch(filepath, fileExtensions, search, options = {}, cacheCallback) {
+  const {
+    minimumScore = 0.6,
+    batchSize = 100,
+    parallelSearches = 1,
+    useMetadata = false
+  } = options;
   const absolutePath = path.resolve(process.cwd(), filepath);
   if (!fs.existsSync(absolutePath)) throw new Error("Filepath does not exist.");
   if (!Array.isArray(fileExtensions)) throw new Error("fileExtensions must be an array.");
@@ -10,9 +17,10 @@ async function simpleFolderSearch(filepath, fileExtensions, search, minimumScore
   if (typeof minimumScore !== "number") throw new Error("Minimum score must be a number.");
   if (minimumScore < 0 || minimumScore > 1) throw new Error("Minimum score must be between 0 and 1.");
   if (typeof batchSize !== "number" || batchSize <= 0) throw new Error("Batch size must be a positive number.");
+  if (typeof parallelSearches !== "number" || parallelSearches <= 0) throw new Error("Parallel searches must be a positive number.");
   let filesForFuse = [];
   if (cacheCallback) {
-    const cachedFiles = await cacheCallback(absolutePath, fileExtensions);
+    const cachedFiles = await cacheCallback(absolutePath, fileExtensions, search);
     filesForFuse = cachedFiles.map((file) => ({
       name: path.parse(file).name,
       artist: path.basename(path.dirname(file)),
@@ -39,11 +47,21 @@ async function simpleFolderSearch(filepath, fileExtensions, search, minimumScore
     }
     for (const batch of collectFiles(absolutePath)) {
       for (const file of batch) {
-        filesForFuse.push({
+        const fileData = {
           name: path.parse(file).name,
           artist: path.basename(path.dirname(file)),
           path: file
-        });
+        };
+        if (useMetadata) {
+          try {
+            const metadata = await mm.parseFile(file);
+            fileData.metadata = metadata;
+            fileData.name = metadata.common.title || fileData.name;
+            fileData.artist = metadata.common.artist || fileData.artist;
+          } catch (error) {
+          }
+        }
+        filesForFuse.push(fileData);
       }
     }
   }
@@ -56,8 +74,11 @@ async function simpleFolderSearch(filepath, fileExtensions, search, minimumScore
     keys: ["name", "artist"]
   };
   const fuse = new Fuse(filesForFuse, fuseOptions);
-  const results = Array.isArray(search) ? fuse.search({ name: search[0], artist: search[1] }) : fuse.search(search);
-  return results.filter((result) => result.score ? result.score <= 1 - minimumScore : false).map((result) => result.item.path);
+  const searchQueries = Array.isArray(search) ? [{ name: search[0], artist: search[1] }] : [search];
+  const searchPromises = searchQueries.map((query) => fuse.search(query));
+  const results = await Promise.all(searchPromises);
+  const flattenedResults = results.flat();
+  return flattenedResults.filter((result) => result.score ? result.score <= 1 - minimumScore : false).map((result) => result.item.path);
 }
 export {
   simpleFolderSearch

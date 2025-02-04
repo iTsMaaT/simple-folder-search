@@ -38,7 +38,14 @@ module.exports = __toCommonJS(index_exports);
 var import_fs = __toESM(require("fs"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_fuse = __toESM(require("fuse.js"), 1);
-async function simpleFolderSearch(filepath, fileExtensions, search, minimumScore = 0.6, batchSize = 100, cacheCallback) {
+var mm = __toESM(require("music-metadata"), 1);
+async function simpleFolderSearch(filepath, fileExtensions, search, options = {}, cacheCallback) {
+  const {
+    minimumScore = 0.6,
+    batchSize = 100,
+    parallelSearches = 1,
+    useMetadata = false
+  } = options;
   const absolutePath = import_path.default.resolve(process.cwd(), filepath);
   if (!import_fs.default.existsSync(absolutePath)) throw new Error("Filepath does not exist.");
   if (!Array.isArray(fileExtensions)) throw new Error("fileExtensions must be an array.");
@@ -46,9 +53,10 @@ async function simpleFolderSearch(filepath, fileExtensions, search, minimumScore
   if (typeof minimumScore !== "number") throw new Error("Minimum score must be a number.");
   if (minimumScore < 0 || minimumScore > 1) throw new Error("Minimum score must be between 0 and 1.");
   if (typeof batchSize !== "number" || batchSize <= 0) throw new Error("Batch size must be a positive number.");
+  if (typeof parallelSearches !== "number" || parallelSearches <= 0) throw new Error("Parallel searches must be a positive number.");
   let filesForFuse = [];
   if (cacheCallback) {
-    const cachedFiles = await cacheCallback(absolutePath, fileExtensions);
+    const cachedFiles = await cacheCallback(absolutePath, fileExtensions, search);
     filesForFuse = cachedFiles.map((file) => ({
       name: import_path.default.parse(file).name,
       artist: import_path.default.basename(import_path.default.dirname(file)),
@@ -75,11 +83,21 @@ async function simpleFolderSearch(filepath, fileExtensions, search, minimumScore
     }
     for (const batch of collectFiles(absolutePath)) {
       for (const file of batch) {
-        filesForFuse.push({
+        const fileData = {
           name: import_path.default.parse(file).name,
           artist: import_path.default.basename(import_path.default.dirname(file)),
           path: file
-        });
+        };
+        if (useMetadata) {
+          try {
+            const metadata = await mm.parseFile(file);
+            fileData.metadata = metadata;
+            fileData.name = metadata.common.title || fileData.name;
+            fileData.artist = metadata.common.artist || fileData.artist;
+          } catch (error) {
+          }
+        }
+        filesForFuse.push(fileData);
       }
     }
   }
@@ -92,8 +110,11 @@ async function simpleFolderSearch(filepath, fileExtensions, search, minimumScore
     keys: ["name", "artist"]
   };
   const fuse = new import_fuse.default(filesForFuse, fuseOptions);
-  const results = Array.isArray(search) ? fuse.search({ name: search[0], artist: search[1] }) : fuse.search(search);
-  return results.filter((result) => result.score ? result.score <= 1 - minimumScore : false).map((result) => result.item.path);
+  const searchQueries = Array.isArray(search) ? [{ name: search[0], artist: search[1] }] : [search];
+  const searchPromises = searchQueries.map((query) => fuse.search(query));
+  const results = await Promise.all(searchPromises);
+  const flattenedResults = results.flat();
+  return flattenedResults.filter((result) => result.score ? result.score <= 1 - minimumScore : false).map((result) => result.item.path);
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

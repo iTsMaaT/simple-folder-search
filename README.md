@@ -9,6 +9,8 @@ This was mostly made for use with the `discord-player` package, but it can still
 - Search for files by name
 - Filter files by extension
 - Recursive search through subdirectories
+- Customizable caching mechanism
+- Optional metadata extraction
 
 ## Installation
 
@@ -30,7 +32,7 @@ const { Player, QueryType } = require('discord-player');
 const player = new Player(client);
 
 // Search for music files in your music folder
-const musicFiles = simpleFolderSearch('./music', ['.mp3', '.wav'], 'my song', 0.6);
+const musicFiles = await simpleFolderSearch('./music', ['.mp3', '.wav'], 'my song', { minimumScore: 0.6 });
 
 if (musicFiles.length > 0) {
     // Get the first matching file
@@ -53,11 +55,20 @@ if (musicFiles.length > 0) {
 You can also search for files using both the file name and the artist (folder name) by providing the search query as an array. The first element of the array should be the file name, and the second element should be the artist (folder name).
 
 ```javascript
-const results = await simpleFolderSearch("./music", [".mp3", ".wav"], ["my song", "artist name"], 0.6, 100);
+const results = await simpleFolderSearch("./music", [".mp3", ".wav"], ["my song", "artist name"], { minimumScore: 0.6, batchSize: 100 });
 console.log(results);
 ```
 
 In this example, the search will look for files named "my song" within folders named "artist name".
+
+### Options
+
+The `simpleFolderSearch` function accepts an options object with the following properties:
+
+- `minimumScore` (number): The minimum score for a match to be considered valid (default: 0.6).
+- `batchSize` (number): The number of files to process in each batch (default: 100).
+- `parallelSearches` (number): The number of parallel searches to perform (default: 1).
+- `useMetadata` (boolean): Whether to extract metadata from files (default: false).
 
 ### Normal behaviour
 
@@ -74,7 +85,7 @@ You can provide a custom caching method to the `simpleFolderSearch` function usi
 ```javascript
 const cache = {};
 
-async function inMemoryCacheCallback(filePath, fileExtensions) {
+async function inMemoryCacheCallback(filePath, fileExtensions, search) {
     if (cache[filePath]) {
         return cache[filePath];
     }
@@ -98,7 +109,7 @@ async function inMemoryCacheCallback(filePath, fileExtensions) {
     return files;
 }
 
-const results = await simpleFolderSearch("./music", [".mp3", ".wav"], "my song", 0.6, 100, inMemoryCacheCallback);
+const results = await simpleFolderSearch("./music", [".mp3", ".wav"], "my song", { minimumScore: 0.6, batchSize: 100 }, inMemoryCacheCallback);
 console.log(results);
 ```
 
@@ -147,7 +158,7 @@ You can use a lightweight database like SQLite for caching.
    const sqlite3 = require('sqlite3').verbose();
    const db = new sqlite3.Database('files.db');
 
-   async function dbCacheCallback(filePath, fileExtensions) {
+   async function dbCacheCallback(filePath, fileExtensions, search) {
        return new Promise((resolve, reject) => {
            db.all("SELECT path FROM files WHERE extension IN (" + fileExtensions.map(() => '?').join(',') + ")", fileExtensions, (err, rows) => {
                if (err) {
@@ -159,7 +170,7 @@ You can use a lightweight database like SQLite for caching.
        });
    }
 
-   const results = await simpleFolderSearch("./music", [".mp3", ".wav"], "my song", 0.6, 100, dbCacheCallback);
+   const results = await simpleFolderSearch("./music", [".mp3", ".wav"], "my song", { minimumScore: 0.6, batchSize: 100 }, dbCacheCallback);
    console.log(results);
    ```
 
@@ -174,7 +185,20 @@ The `simpleFolderSearch` function uses the following types:
 A callback function type for custom caching logic.
 
 ```typescript
-type CacheCallback = (filePath: string, fileExtensions: string[]) => Promise<string[]>;
+type CacheCallback = (filePath: string, fileExtensions: string[], search?: string[] | string) => Promise<string[]>;
+```
+
+### `SearchOptions`
+
+An interface for the search options.
+
+```typescript
+interface SearchOptions {
+    minimumScore?: number;
+    batchSize?: number;
+    parallelSearches?: number;
+    useMetadata?: boolean;
+}
 ```
 
 ### `simpleFolderSearch`
@@ -188,8 +212,7 @@ The main function to perform a simple folder search.
  * @param {string} filepath - The directory to search in.
  * @param {string[]} fileExtensions - An array of file extensions to filter by.
  * @param {string | string[]} search - The search query, either a string or an array of [name, artist].
- * @param {number} [minimumScore=0.6] - The minimum score for a match to be considered valid.
- * @param {number} [batchSize=10] - The number of files to process in each batch.
+ * @param {SearchOptions} [options] - Optional search options.
  * @param {CacheCallback} [cacheCallback] - Optional callback for custom caching logic.
  * @returns {Promise<string[]>} A promise that resolves to an array of file paths that match the search query.
  */
@@ -197,8 +220,7 @@ export async function simpleFolderSearch(
     filepath: string,
     fileExtensions: string[],
     search: string | string[],
-    minimumScore: number = 0.6,
-    batchSize: number = 100,
+    options: SearchOptions = {},
     cacheCallback?: CacheCallback
 ): Promise<string[]>;
 ```

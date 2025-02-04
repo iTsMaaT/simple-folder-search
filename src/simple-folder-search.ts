@@ -1,8 +1,16 @@
 import fs from "fs";
 import path from "path";
 import Fuse from "fuse.js";
+import * as mm from "music-metadata";
 
-type CacheCallback = (filePath: string, fileExtensions: string[]) => Promise<string[]>;
+type CacheCallback = (filePath: string, fileExtensions: string[], search?: string[] | string) => Promise<string[]>;
+
+interface SearchOptions {
+    minimumScore?: number;
+    batchSize?: number;
+    parallelSearches?: number;
+    useMetadata?: boolean;
+}
 
 /**
  * Perform a simple folder search based on file names and optionally artist names.
@@ -10,8 +18,7 @@ type CacheCallback = (filePath: string, fileExtensions: string[]) => Promise<str
  * @param {string} filepath - The directory to search in.
  * @param {string[]} fileExtensions - An array of file extensions to filter by.
  * @param {string | string[]} search - The search query, either a string or an array of [name, artist].
- * @param {number} [minimumScore=0.6] - The minimum score for a match to be considered valid.
- * @param {number} [batchSize=10] - The number of files to process in each batch.
+ * @param {SearchOptions} [options] - Optional search options.
  * @param {CacheCallback} [cacheCallback] - Optional callback for custom caching logic.
  * @returns {Promise<string[]>} A promise that resolves to an array of file paths that match the search query.
  */
@@ -19,10 +26,16 @@ export async function simpleFolderSearch(
     filepath: string,
     fileExtensions: string[],
     search: string | string[],
-    minimumScore: number = 0.6,
-    batchSize: number = 100,
+    options: SearchOptions = {},
     cacheCallback?: CacheCallback,
 ): Promise<string[]> {
+    const {
+        minimumScore = 0.6,
+        batchSize = 100,
+        parallelSearches = 1,
+        useMetadata = false,
+    } = options;
+
     const absolutePath = path.resolve(process.cwd(), filepath);
 
     if (!fs.existsSync(absolutePath)) throw new Error("Filepath does not exist.");
@@ -31,11 +44,12 @@ export async function simpleFolderSearch(
     if (typeof minimumScore !== "number") throw new Error("Minimum score must be a number.");
     if (minimumScore < 0 || minimumScore > 1) throw new Error("Minimum score must be between 0 and 1.");
     if (typeof batchSize !== "number" || batchSize <= 0) throw new Error("Batch size must be a positive number.");
+    if (typeof parallelSearches !== "number" || parallelSearches <= 0) throw new Error("Parallel searches must be a positive number.");
 
-    let filesForFuse: { name: string; artist?: string; path: string }[] = [];
+    let filesForFuse: { name: string; artist?: string; path: string; metadata?: mm.IAudioMetadata }[] = [];
 
     if (cacheCallback) {
-        const cachedFiles = await cacheCallback(absolutePath, fileExtensions);
+        const cachedFiles = await cacheCallback(absolutePath, fileExtensions, search);
         filesForFuse = cachedFiles.map(file => ({
             name: path.parse(file).name,
             artist: path.basename(path.dirname(file)),
@@ -65,11 +79,24 @@ export async function simpleFolderSearch(
 
         for (const batch of collectFiles(absolutePath)) {
             for (const file of batch) {
-                filesForFuse.push({
+                const fileData: { name: string; artist?: string; path: string; metadata?: mm.IAudioMetadata } = {
                     name: path.parse(file).name,
                     artist: path.basename(path.dirname(file)),
                     path: file,
-                });
+                };
+
+                if (useMetadata) {
+                    try {
+                        const metadata = await mm.parseFile(file);
+                        fileData.metadata = metadata;
+                        fileData.name = metadata.common.title || fileData.name;
+                        fileData.artist = metadata.common.artist || fileData.artist;
+                    } catch (error) {
+                        // Ignore errors
+                    }
+                }
+
+                filesForFuse.push(fileData);
             }
         }
     }
@@ -86,10 +113,15 @@ export async function simpleFolderSearch(
     };
 
     const fuse = new Fuse(filesForFuse, fuseOptions);
-    
+
     // Perform search and filter results
-    const results = Array.isArray(search) ? fuse.search({ name: search[0], artist: search[1] }) : fuse.search(search);
-    return results
+    const searchQueries = Array.isArray(search) ? [{ name: search[0], artist: search[1] }] : [search];
+    const searchPromises = searchQueries.map(query => fuse.search(query));
+
+    const results = await Promise.all(searchPromises);
+    const flattenedResults = results.flat();
+
+    return flattenedResults
         .filter(result => (result.score ? result.score <= (1 - minimumScore) : false))
         .map(result => result.item.path);
 }
