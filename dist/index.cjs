@@ -38,13 +38,11 @@ module.exports = __toCommonJS(index_exports);
 var import_fs = __toESM(require("fs"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_fuse = __toESM(require("fuse.js"), 1);
-var mm = __toESM(require("music-metadata"), 1);
 async function simpleFolderSearch(filepath, fileExtensions, search, options = {}, cacheCallback) {
   const {
     minimumScore = 0.6,
     batchSize = 100,
-    parallelSearches = 1,
-    useMetadata = false
+    parallelSearches = 1
   } = options;
   const absolutePath = import_path.default.resolve(process.cwd(), filepath);
   if (!import_fs.default.existsSync(absolutePath)) throw new Error("Filepath does not exist.");
@@ -54,14 +52,20 @@ async function simpleFolderSearch(filepath, fileExtensions, search, options = {}
   if (minimumScore < 0 || minimumScore > 1) throw new Error("Minimum score must be between 0 and 1.");
   if (typeof batchSize !== "number" || batchSize <= 0) throw new Error("Batch size must be a positive number.");
   if (typeof parallelSearches !== "number" || parallelSearches <= 0) throw new Error("Parallel searches must be a positive number.");
-  let filesForFuse = [];
+  const filesForFuse = [];
+  const processFiles = async (files) => {
+    for (const file of files) {
+      const fileData = {
+        name: import_path.default.parse(file).name,
+        artist: import_path.default.basename(import_path.default.dirname(file)),
+        path: file
+      };
+      filesForFuse.push(fileData);
+    }
+  };
   if (cacheCallback) {
     const cachedFiles = await cacheCallback(absolutePath, fileExtensions, search);
-    filesForFuse = cachedFiles.map((file) => ({
-      name: import_path.default.parse(file).name,
-      artist: import_path.default.basename(import_path.default.dirname(file)),
-      path: file
-    }));
+    await processFiles(cachedFiles);
   } else {
     function* collectFiles(dir) {
       const entries = import_fs.default.readdirSync(dir, { withFileTypes: true });
@@ -81,25 +85,8 @@ async function simpleFolderSearch(filepath, fileExtensions, search, options = {}
       if (batch.length > 0)
         yield batch;
     }
-    for (const batch of collectFiles(absolutePath)) {
-      for (const file of batch) {
-        const fileData = {
-          name: import_path.default.parse(file).name,
-          artist: import_path.default.basename(import_path.default.dirname(file)),
-          path: file
-        };
-        if (useMetadata) {
-          try {
-            const metadata = await mm.parseFile(file);
-            fileData.metadata = metadata;
-            fileData.name = metadata.common.title || fileData.name;
-            fileData.artist = metadata.common.artist || fileData.artist;
-          } catch (error) {
-          }
-        }
-        filesForFuse.push(fileData);
-      }
-    }
+    for (const batch of collectFiles(absolutePath))
+      await processFiles(batch);
   }
   if (!search || Array.isArray(search) && search.length === 0)
     return filesForFuse.map((file) => file.path);

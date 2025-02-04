@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
 import Fuse from "fuse.js";
-import * as mm from "music-metadata";
 
 type CacheCallback = (filePath: string, fileExtensions: string[], search?: string[] | string) => Promise<string[]>;
 
@@ -9,7 +8,6 @@ interface SearchOptions {
     minimumScore?: number;
     batchSize?: number;
     parallelSearches?: number;
-    useMetadata?: boolean;
 }
 
 /**
@@ -33,7 +31,6 @@ export async function simpleFolderSearch(
         minimumScore = 0.6,
         batchSize = 100,
         parallelSearches = 1,
-        useMetadata = false,
     } = options;
 
     const absolutePath = path.resolve(process.cwd(), filepath);
@@ -46,15 +43,23 @@ export async function simpleFolderSearch(
     if (typeof batchSize !== "number" || batchSize <= 0) throw new Error("Batch size must be a positive number.");
     if (typeof parallelSearches !== "number" || parallelSearches <= 0) throw new Error("Parallel searches must be a positive number.");
 
-    let filesForFuse: { name: string; artist?: string; path: string; metadata?: mm.IAudioMetadata }[] = [];
+    const filesForFuse: { name: string; artist?: string; path: string}[] = [];
+
+    const processFiles = async (files: string[]) => {
+        for (const file of files) {
+            const fileData: { name: string; artist?: string; path: string} = {
+                name: path.parse(file).name,
+                artist: path.basename(path.dirname(file)),
+                path: file,
+            };
+
+            filesForFuse.push(fileData);
+        }
+    };
 
     if (cacheCallback) {
         const cachedFiles = await cacheCallback(absolutePath, fileExtensions, search);
-        filesForFuse = cachedFiles.map(file => ({
-            name: path.parse(file).name,
-            artist: path.basename(path.dirname(file)),
-            path: file,
-        }));
+        await processFiles(cachedFiles);
     } else {
         function* collectFiles(dir: string): Generator<string[]> {
             const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -77,28 +82,9 @@ export async function simpleFolderSearch(
                 yield batch;
         }
 
-        for (const batch of collectFiles(absolutePath)) {
-            for (const file of batch) {
-                const fileData: { name: string; artist?: string; path: string; metadata?: mm.IAudioMetadata } = {
-                    name: path.parse(file).name,
-                    artist: path.basename(path.dirname(file)),
-                    path: file,
-                };
-
-                if (useMetadata) {
-                    try {
-                        const metadata = await mm.parseFile(file);
-                        fileData.metadata = metadata;
-                        fileData.name = metadata.common.title || fileData.name;
-                        fileData.artist = metadata.common.artist || fileData.artist;
-                    } catch (error) {
-                        // Ignore errors
-                    }
-                }
-
-                filesForFuse.push(fileData);
-            }
-        }
+        for (const batch of collectFiles(absolutePath)) 
+            await processFiles(batch);
+        
     }
 
     // If search is empty, return all files with matching extensions

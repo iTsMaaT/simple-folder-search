@@ -1,6 +1,6 @@
 {
   "name": "simple-folder-search",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "A simple folder search package",
   "main": "dist/index.cjs",
   "exports": {
@@ -41,7 +41,6 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
-    "fuse.js": "^7.0.0",
-    "music-metadata": "^10.8.2"
+    "fuse.js": "^7.0.0"
   }
 }

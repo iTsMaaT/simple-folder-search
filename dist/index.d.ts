@@ -3,7 +3,6 @@ interface SearchOptions {
     minimumScore?: number;
     batchSize?: number;
     parallelSearches?: number;
-    useMetadata?: boolean;
 }
 /**
  * Perform a simple folder search based on file names and optionally artist names.
