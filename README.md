@@ -10,12 +10,6 @@ To install the package, use the following command:
 npm install simple-folder-search
 ```
 
-You can also install it using yarn:
-
-```bash
-yarn add simple-folder-search
-```
-
 ## Usage
 
 Here is a basic example of how to use the package:
