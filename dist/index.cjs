@@ -30,6 +30,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
+  searchCandidates: () => searchCandidates,
   simpleFolderSearch: () => simpleFolderSearch
 });
 module.exports = __toCommonJS(index_exports);
@@ -90,13 +91,16 @@ async function simpleFolderSearch(filepath, fileExtensions, search, options = {}
   }
   if (!search || Array.isArray(search) && search.length === 0)
     return filesForFuse.map((file) => file.path);
+  return await searchCandidates(filesForFuse, search, minimumScore);
+}
+async function searchCandidates(candidates, search, minimumScore) {
   const fuseOptions = {
     includeScore: true,
     threshold: 1 - minimumScore,
     // Convert our score to Fuse threshold
     keys: ["name", "artist"]
   };
-  const fuse = new import_fuse.default(filesForFuse, fuseOptions);
+  const fuse = new import_fuse.default(candidates, fuseOptions);
   const searchQueries = Array.isArray(search) ? [{ name: search[0], artist: search[1] }] : [search];
   const searchPromises = searchQueries.map((query) => fuse.search(query));
   const results = await Promise.all(searchPromises);
@@ -105,5 +109,6 @@ async function simpleFolderSearch(filepath, fileExtensions, search, options = {}
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  searchCandidates,
   simpleFolderSearch
 });

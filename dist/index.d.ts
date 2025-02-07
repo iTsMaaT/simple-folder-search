@@ -15,5 +15,18 @@ interface SearchOptions {
  * @returns {Promise<string[]>} A promise that resolves to an array of file paths that match the search query.
  */
 declare function simpleFolderSearch(filepath: string, fileExtensions: string[], search: string | string[], options?: SearchOptions, cacheCallback?: CacheCallback): Promise<string[]>;
+/**
+ * Search for candidates based on a search query and minimum score.
+ *
+ * @param {Array<{name: string; artist?: string; path: string;}>} candidates - An array of candidate objects to search through.
+ * @param {string | string[]} search - The search query, either a string or an array of [name, artist].
+ * @param {number} minimumScore - The minimum score required for a candidate to be considered a match.
+ * @returns {Promise<string[]>} A promise that resolves to an array of file paths that match the search query.
+ */
+declare function searchCandidates(candidates: {
+    name: string;
+    artist?: string;
+    path: string;
+}[], search: string | string[], minimumScore: number): Promise<string[]>;
 
-export { simpleFolderSearch };
+export { searchCandidates, simpleFolderSearch };

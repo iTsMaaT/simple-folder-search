@@ -91,14 +91,25 @@ export async function simpleFolderSearch(
     if (!search || (Array.isArray(search) && search.length === 0)) 
         return filesForFuse.map(file => file.path);
 
+    return await searchCandidates(filesForFuse, search, minimumScore);
+}
+
+/**
+ * Search for candidates based on a search query and minimum score.
+ * 
+ * @param {Array<{name: string; artist?: string; path: string;}>} candidates - An array of candidate objects to search through.
+ * @param {string | string[]} search - The search query, either a string or an array of [name, artist].
+ * @param {number} minimumScore - The minimum score required for a candidate to be considered a match.
+ * @returns {Promise<string[]>} A promise that resolves to an array of file paths that match the search query.
+ */
+export async function searchCandidates(candidates: {name: string; artist?: string; path: string;}[], search: string|string[], minimumScore: number): Promise<string[]> {
     // Setup Fuse with options
     const fuseOptions = {
         includeScore: true,
         threshold: 1 - minimumScore, // Convert our score to Fuse threshold
         keys: ["name", "artist"],
     };
-
-    const fuse = new Fuse(filesForFuse, fuseOptions);
+    const fuse = new Fuse(candidates, fuseOptions);
 
     // Perform search and filter results
     const searchQueries = Array.isArray(search) ? [{ name: search[0], artist: search[1] }] : [search];

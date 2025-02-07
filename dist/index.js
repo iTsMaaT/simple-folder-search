@@ -54,13 +54,16 @@ async function simpleFolderSearch(filepath, fileExtensions, search, options = {}
   }
   if (!search || Array.isArray(search) && search.length === 0)
     return filesForFuse.map((file) => file.path);
+  return await searchCandidates(filesForFuse, search, minimumScore);
+}
+async function searchCandidates(candidates, search, minimumScore) {
   const fuseOptions = {
     includeScore: true,
     threshold: 1 - minimumScore,
     // Convert our score to Fuse threshold
     keys: ["name", "artist"]
   };
-  const fuse = new Fuse(filesForFuse, fuseOptions);
+  const fuse = new Fuse(candidates, fuseOptions);
   const searchQueries = Array.isArray(search) ? [{ name: search[0], artist: search[1] }] : [search];
   const searchPromises = searchQueries.map((query) => fuse.search(query));
   const results = await Promise.all(searchPromises);
@@ -68,5 +71,6 @@ async function simpleFolderSearch(filepath, fileExtensions, search, options = {}
   return flattenedResults.filter((result) => result.score ? result.score <= 1 - minimumScore : false).map((result) => result.item.path);
 }
 export {
+  searchCandidates,
   simpleFolderSearch
 };
