@@ -1,6 +1,6 @@
 {
   "name": "simple-folder-search",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "A simple folder search package",
   "main": "dist/index.cjs",
   "exports": {
