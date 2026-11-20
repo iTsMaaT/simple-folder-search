@@ -1,16 +1,30 @@
 {
   "name": "simple-folder-search",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "A simple folder search package",
-  "main": "dist/index.cjs",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.cts",
   "exports": {
-    "import": "./dist/index.mjs",
-    "require": "./dist/index.cjs"
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
   },
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsup src/index.ts --format esm,cjs --dts --out-dir dist",
+    "build": "tsup",
     "code": "git pull && npm i && code . && eslint src",
     "c": "npm run code"
   },

@@ -5,5 +5,6 @@ export default defineConfig({
     entry: ['./src/index.ts'],
     outDir: "./dist",
     skipNodeModulesBundle: true,
-    dts: true
+    dts: true,
+    clean: true
 });
