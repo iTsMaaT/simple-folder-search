@@ -1,7 +1,7 @@
 {
   "name": "simple-folder-search",
-  "version": "2.3.1",
-  "description": "A simple folder search package",
+  "version": "2.4.0",
+  "description": "Fuzzy-search files in a folder by name and parent folder name",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.cts",
@@ -23,10 +23,13 @@
   ],
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --import tsx --test test/*.test.ts",
     "build": "tsup",
     "code": "git pull && npm i && code . && eslint src",
-    "c": "npm run code"
+    "c": "npm run code",
+    "lint": "eslint src test",
+    "typecheck": "tsc --noEmit -p .",
+    "prepublishOnly": "npm run typecheck && npm run lint && npm test && npm run build"
   },
   "author": "iTsMaaT",
   "license": "MIT",
@@ -35,17 +38,19 @@
     "url": "git+https://github.com/iTsMaaT/simple-folder-search.git"
   },
   "bugs": {
-    "url": "https://github.com/iTsMaaT/simple-folder-search.git"
+    "url": "https://github.com/iTsMaaT/simple-folder-search/issues"
   },
-  "homepage": "https://github.com/iTsMaaT/simple-folder-search.git",
+  "homepage": "https://github.com/iTsMaaT/simple-folder-search#readme",
   "keywords": [
     "folder",
     "file",
     "search",
-    "find"
+    "find",
+    "fuzzy",
+    "fuse"
   ],
   "devDependencies": {
-    "@types/node": "^22.10.2",
+    "@types/node": "^22.20.5",
     "@typescript-eslint/eslint-plugin": "^8.18.1",
     "@typescript-eslint/parser": "^8.18.1",
     "eslint": "^9.17.0",
@@ -56,5 +61,8 @@
   },
   "dependencies": {
     "fuse.js": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

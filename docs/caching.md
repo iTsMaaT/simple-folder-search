@@ -1,43 +1,51 @@
 # Custom Caching
 
-The Simple Folder Search package supports custom caching to improve search performance. You can provide a custom caching method to the `simpleFolderSearch` function using a callback. This allows you to use different caching mechanisms, such as an in-memory cache or a database.
+Scanning a large folder on every search is slow. There are two ways to avoid it.
 
-## In-Memory Cache Example
+## Built-in: `createSearchIndex` (recommended)
 
-```javascript
-const cache = {};
+For most cases you don't need a custom cache. `createSearchIndex` scans the folder once, keeps the fuzzy index in memory, and lets you re-scan when you want:
 
-async function inMemoryCacheCallback(filePath, fileExtensions) {
-    if (cache[filePath]) {
-        return cache[filePath];
-    }
+```js
+import { createSearchIndex } from "simple-folder-search";
 
-    // Default file collection logic
-    const files = [];
-    function collectFiles(dir) {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-            const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-                collectFiles(fullPath);
-            } else if (fileExtensions.length === 0 || fileExtensions.some(ext => entry.name.endsWith(ext))) {
-                files.push(fullPath);
-            }
-        }
-    }
+const index = await createSearchIndex("./music", [".mp3", ".wav"]);
 
-    collectFiles(filePath);
-    cache[filePath] = files;
-    return files;
-}
-
-const results = await simpleFolderSearch("./music", [".mp3", ".wav"], "my song", { minimumScore: 0.6, batchSize: 100 }, inMemoryCacheCallback);
-console.log(results);
+index.search("my song");
+await index.refresh(); // for example from a file watcher or a timer
 ```
 
-## Database Cache Example
+## Custom file provider (`cacheCallback`)
 
-You can use a lightweight database like SQLite for caching.
+To get the file list from somewhere else (a database, a remote index…), pass a callback as the 5th argument of `simpleFolderSearch` (or as `cache` in the object form). When it is given, the folder isn't scanned: the callback's paths are fuzzy-searched as-is.
+
+```ts
+type CacheCallback = (filePath: string, fileExtensions: string[], search?: SearchQuery) => Promise<string[]>;
+```
+
+The callback's result is **not** filtered by extension again, so return only the files you want searched.
+
+### In-memory cache example
+
+`scanFiles` does the folder walk for you:
+
+```js
+import { simpleFolderSearch, scanFiles } from "simple-folder-search";
+
+const cache = new Map();
+
+async function inMemoryCacheCallback(filePath, fileExtensions) {
+    const key = `${filePath}|${fileExtensions.join(",")}`;
+    if (!cache.has(key)) cache.set(key, await scanFiles(filePath, fileExtensions));
+    return cache.get(key);
+}
+
+const results = await simpleFolderSearch("./music", [".mp3", ".wav"], "my song", { minimumScore: 0.6 }, inMemoryCacheCallback);
+```
+
+### Database cache example
+
+You can use a lightweight database such as SQLite.
 
 1. Install SQLite:
 
@@ -45,58 +53,59 @@ You can use a lightweight database like SQLite for caching.
 npm install sqlite3
 ```
 
-2. Indexing Files: Create a script to index files and store them in the database.
+2. Index the files and store them in the database:
 
 ```js
-const sqlite3 = require('sqlite3').verbose();
-const db = new sqlite3.Database('files.db');
+import sqlite3 from "sqlite3";
+import path from "node:path";
+import { scanFiles } from "simple-folder-search";
+
+const db = new sqlite3.Database("files.db");
+const files = await scanFiles("./music");
 
 db.serialize(() => {
-    db.run("CREATE TABLE IF NOT EXISTS files (name TEXT, path TEXT, extension TEXT)");
-
-    const indexFiles = (dir) => {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-            const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-                indexFiles(fullPath);
-            } else {
-                const ext = path.extname(entry.name);
-                db.run("INSERT INTO files (name, path, extension) VALUES (?, ?, ?)", [entry.name, fullPath, ext]);
-            }
-        }
-    };
-
-    indexFiles("./your-directory");
+    db.run("CREATE TABLE IF NOT EXISTS files (name TEXT, path TEXT UNIQUE, extension TEXT)");
+    const insert = db.prepare("INSERT OR IGNORE INTO files (name, path, extension) VALUES (?, ?, ?)");
+    for (const file of files)
+        insert.run(path.basename(file), file, path.extname(file).toLowerCase());
+    insert.finalize();
 });
 
 db.close();
 ```
 
-3. Database Cache Callback: Implement the cache callback to fetch files from the database.
+3. Read the files from the database in the cache callback.
 
-This method also pre-checks the search to filter words out of the database results, as the database searches much faster than fuzzy-matching
+This callback also pre-filters rows on the words of the query, since the database narrows results much faster than fuzzy matching does. All values are passed as `?` parameters: never concatenate user input into SQL.
 
 ```js
-const sqlite3 = require('sqlite3').verbose();
-const db = new sqlite3.Database('files.db');
+import sqlite3 from "sqlite3";
+import { simpleFolderSearch } from "simple-folder-search";
 
-async function dbCacheCallback(filePath, fileExtensions) {
+const db = new sqlite3.Database("files.db");
+
+function dbCacheCallback(filePath, fileExtensions, search) {
+    const text = !search ? "" : typeof search === "string" ? search : Object.values(search).join(" ");
+    const words = text.toLowerCase().split(/\s+/).filter(Boolean);
+
+    const where = [];
+    const params = [];
+    if (fileExtensions.length > 0) {
+        where.push(`extension IN (${fileExtensions.map(() => "?").join(",")})`);
+        params.push(...fileExtensions.map(ext => ext.toLowerCase()));
+    }
+    if (words.length > 0) {
+        where.push(`(${words.map(() => "LOWER(path) LIKE ? ESCAPE '\\'").join(" OR ")})`);
+        params.push(...words.map(word => `%${word.replace(/[\\%_]/g, "\\$&")}%`));
+    }
+
+    const sql = `SELECT path FROM files${where.length ? ` WHERE ${where.join(" AND ")}` : ""}`;
     return new Promise((resolve, reject) => {
-        const exts = fileExtensions.map(() => '?').join(',');
-        const tokens = (!search ? '1=1' : Array.isArray(search) ? search.join(' '): search).toLowerCase().split(' ').map(x => 'path LIKE "%'+x+'%"').join(' OR ');
-        db.all("SELECT path FROM files WHERE extension IN (" + exts + ") AND (" + tokens + ")", fileExtensions, (err, rows) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(rows.map(row => row.path));
-            }
-        });
+        db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows.map(row => row.path))));
     });
 }
 
-const results = await simpleFolderSearch("./music", [".mp3", ".wav"], "my song", { minimumScore: 0.6, batchSize: 100 }, dbCacheCallback);
-console.log(results);
+const results = await simpleFolderSearch("./music", [".mp3", ".wav"], "my song", { minimumScore: 0.6 }, dbCacheCallback);
 ```
 
-This approach allows you to customize the caching mechanism according to your needs, whether it's an in-memory cache, a database, or any other storage solution.
+This lets you plug in whatever storage you need: an in-memory cache, a database, or anything else.
